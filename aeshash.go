@@ -1,7 +1,10 @@
 package aeshash
 
-import _ "unsafe"
-import "leb.io/hashland/nhash"
+import (
+	_ "unsafe"
+
+	"leb.io/hashland/nhash"
+)
 
 var masks [32]uint64
 var shifts [32]uint64
@@ -42,12 +45,13 @@ func init() {
 // Make sure interfaces are correctly implemented. Stolen from another implementation.
 // I did something similar in another package to verify the interface but didn't know you could elide the variable in a var.
 // What a cute wart it is.
-var (
+
+/* var (
 	//_ hash.Hash   = new(Digest)
 	_ nhash.Hash64     = new(StateAES)
 	_ nhash.HashStream = new(StateAES)
 )
-
+*/
 type StateAES struct {
 	hash uint64
 	seed uint64
