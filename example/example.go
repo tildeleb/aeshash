@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"leb.io/hashland/aeshash"
 	_ "unsafe"
+
+	"leb.io/aeshash"
 )
 
 var strs = []string{"abcd", "efgh", "blow", "deadbeef"}

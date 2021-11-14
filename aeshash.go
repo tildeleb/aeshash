@@ -6,30 +6,19 @@ import (
 	"leb.io/hashland/nhash"
 )
 
+const hashRandomBytes = 32 // used in asm_{386,amd64}.s
 var masks [32]uint64
 var shifts [32]uint64
-
-// used in asm_{386,amd64}.s
-const hashRandomBytes = 32
-
-// this is really 2 x 128 bit round keys
-var aeskeysched [hashRandomBytes]byte
-
+var aeskeysched [hashRandomBytes]byte // this is really 2 x 128 bit round keys
 var aesdebug [hashRandomBytes]byte
 
 func aeshashbody()
 
-//func Hash(p unsafe.Pointer, s, h uintptr) uintptr
-//func HashStr(p string, s, h uintptr) uintptr
+// Use these functions for higest speed
 func Hash(b []byte, seed uint64) uint64
 func HashStr(s string, seed uint64) uint64
 func Hash64(v uint64, s uint64) uint64
 func Hash32(v uint32, s uint64) uint64
-
-//func aeshash(p unsafe.Pointer, s, h uintptr) uintptr
-//func aeshash32(p unsafe.Pointer, s, h uintptr) uintptr
-//func aeshash64(p unsafe.Pointer, s, h uintptr) uintptr
-//func aeshashstr(p unsafe.Pointer, s, h uintptr) uintptr
 
 func init() {
 	p := aeskeysched[:]
@@ -42,86 +31,74 @@ func init() {
 	p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15] = 0xFD, 0, 0, 0, 0, 0, 0, 0xFC
 }
 
-// Make sure interfaces are correctly implemented. Stolen from another implementation.
-// I did something similar in another package to verify the interface but didn't know you could elide the variable in a var.
-// What a cute wart it is.
-
-/* var (
-	//_ hash.Hash   = new(Digest)
-	_ nhash.Hash64     = new(StateAES)
-	_ nhash.HashStream = new(StateAES)
-)
-*/
-type StateAES struct {
+//
+type State struct {
 	hash uint64
 	seed uint64
 	clen int
 	tail []byte
 }
 
-func NewAES(seed uint64) nhash.Hash64 {
-	s := new(StateAES)
+func n(seed uint64) *State {
+	s := new(State)
 	s.seed = seed
 	s.Reset()
 	return s
 }
 
-// Return the size of the resulting hash.
-func (d *StateAES) Size() int { return 8 }
+// New returns state used for a aeshash.
+func New(seed uint64) nhash.Hash64 {
+	s := n(seed)
+	return s
+}
 
-// Return the blocksize of the hash which in this case is 1 byte.
-func (d *StateAES) BlockSize() int { return 1 }
+// Size returns the size of the resulting hash.
+func (s *State) Size() int { return 8 }
 
-// Return the maximum number of seed bypes required. In this case 2 x 32
-func (d *StateAES) NumSeedBytes() int {
+// BlockSize returns the blocksize of the hash which in this case is 1 byte.
+func (s *State) BlockSize() int { return 1 }
+
+// NumSeedBytes returns the maximum number of seed bypes required. In this case 2 x 32
+func (s *State) NumSeedBytes() int {
 	return 8
 }
 
-// Return the number of bits the hash function outputs.
-func (d *StateAES) HashSizeInBits() int {
+// HashSizeInBits returns the number of bits the hash function outputs.
+func (s *State) HashSizeInBits() int {
 	return 64
 }
 
 // Reset the hash state.
-func (d *StateAES) Reset() {
-	d.hash = 0
-	d.clen = 0
-	d.tail = nil
+func (s *State) Reset() {
+	s.hash = 0
+	s.clen = 0
+	s.tail = nil
 }
 
-// Accept a byte stream p used for calculating the hash. For now this call is lazy and the actual hash calculations take place in Sum() and Sum32().
-func (d *StateAES) Write(p []byte) (nn int, err error) {
+// Write accepts a byte stream p used for calculating the hash. For now this call is lazy and the actual hash calculations take place in Sum() and Sum32().
+func (s *State) Write(p []byte) (nn int, err error) {
 	l := len(p)
-	d.clen += l
-	d.tail = append(d.tail, p...)
+	s.clen += l
+	s.tail = append(s.tail, p...)
 	return l, nil
 }
 
-func (d *StateAES) Write64(h uint64) (err error) {
-	d.clen += 8
-	d.tail = append(d.tail, byte(h>>56), byte(h>>48), byte(h>>40), byte(h>>32), byte(h>>24), byte(h>>16), byte(h>>8), byte(h))
+// Write64 accepts a uint64 stream p used for calculating the hash. For now this call is lazy and the actual hash calculations take place in Sum() and Sum32().
+func (s *State) Write64(h uint64) (err error) {
+	s.clen += 8
+	s.tail = append(s.tail, byte(h>>56), byte(h>>48), byte(h>>40), byte(h>>32), byte(h>>24), byte(h>>16), byte(h>>8), byte(h))
 	return nil
 }
 
-// Return the current hash as a byte slice.
-func (d *StateAES) Sum(b []byte) []byte {
-	d.hash = Hash(d.tail, d.seed)
-	h := d.hash
+// Sum returns the current hash as a byte slice.
+func (s *State) Sum(b []byte) []byte {
+	s.hash = Hash(s.tail, s.seed)
+	h := s.hash
 	return append(b, byte(h>>56), byte(h>>48), byte(h>>40), byte(h>>32), byte(h>>24), byte(h>>16), byte(h>>8), byte(h))
 }
 
-// Return the current hash as a 64 bit unsigned type.
-func (d *StateAES) Sum64() uint64 {
-	d.hash = Hash(d.tail, d.seed)
-	return d.hash
-}
-
-func (d *StateAES) Hash64(b []byte, seeds ...uint64) uint64 {
-	switch len(seeds) {
-	case 1:
-		d.seed = seeds[0]
-	}
-	d.hash = Hash(b, d.seed)
-	//fmt.Printf("pc=0x%08x, pb=0x%08x\n", d.pc, d.pb)
-	return d.hash
+// Sum64 returns the current hash as a 64 bit unsigned type.
+func (s *State) Sum64() uint64 {
+	s.hash = Hash(s.tail, s.seed)
+	return s.hash
 }
